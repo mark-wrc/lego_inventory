@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import dbConnect from './config/dbConnect.js';
@@ -14,48 +13,47 @@ import { errorHandler, notFound } from './utils/customErrorHandler.js';
 // Load environment variables
 dotenv.config({ path: './backend/config/config.env' });
 
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-// __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Middleware
-app.use(cors());
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// --- Middleware ---
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// --- API Routes ---
+// CORS (only if frontend is on a different domain)
+if (process.env.FRONTEND_URL) {
+	app.use(
+		cors({
+			origin: process.env.FRONTEND_URL,
+			credentials: true,
+		})
+	);
+}
+
+// --- API Routes under /api ---
 app.use('/api', legoSetRoutes);
 app.use('/api', partRoutes);
 app.use('/api', orderRoutes);
 
-// --- Frontend serving for production ---
+// --- Serve React frontend in production ---
 if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
 	const distDir = path.join(__dirname, '../frontend/dist');
 	const indexFile = path.join(distDir, 'index.html');
 
-	if (!fs.existsSync(distDir) || !fs.existsSync(indexFile)) {
-		console.error('❌ Frontend build not found:', distDir, indexFile);
-	} else {
-		console.log('✅ Serving frontend from:', distDir);
-		app.use(express.static(distDir));
+	// Serve static frontend files
+	app.use(express.static(distDir));
 
-		// Catch-all route for React Router
-		app.get('*', (req, res) => {
-			if (!req.path.startsWith('/api/')) {
-				return res.sendFile(indexFile);
-			}
-			res.status(404).json({ success: false, message: 'Not Found' });
-		});
-	}
+	// Fallback middleware for React Router
+	app.use((req, res, next) => {
+		if (req.path.startsWith('/api')) return next(); // Pass API requests to API routes
+		res.sendFile(indexFile); // Serve React app for all other routes
+	});
 }
 
-// --- Optional test route ---
-app.get('/test', (req, res) => res.send('🚀 Server is working!'));
-
-// --- Error handling ---
+// --- Error Handling ---
 app.use(notFound);
 app.use(errorHandler);
 
@@ -65,13 +63,13 @@ const startServer = async () => {
 		await dbConnect();
 		app.listen(PORT, () => {
 			console.log(
-				`🚀 Server running in ${
+				`Server running in ${
 					process.env.NODE_ENV || 'development'
 				} mode on port ${PORT}`
 			);
 		});
 	} catch (error) {
-		console.error('🔥 Failed to connect to DB:', error);
+		console.error('Failed to connect to DB:', error);
 		process.exit(1);
 	}
 };
