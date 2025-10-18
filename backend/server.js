@@ -39,12 +39,12 @@ if (process.env.NODE_ENV === 'production') {
 
 	if (!fs.existsSync(distDir) || !fs.existsSync(indexFile)) {
 		console.error(
-			'❌ dist directory or index.html not found:',
+			'dist directory or index.html not found:',
 			distDir,
 			indexFile
 		);
 	} else {
-		console.log('✅ Production frontend found. Serving static files...');
+		console.log('Production frontend found. Serving static files...');
 		app.use(express.static(distDir));
 
 		// Catch-all route for React Router
@@ -67,11 +67,11 @@ const startServer = async () => {
 		await dbConnect();
 		app.listen(PORT, () => {
 			console.log(
-				`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`
+				`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`
 			);
 		});
 	} catch (error) {
-		console.error('🔥 Failed to connect to DB:', error);
+		console.error('Failed to connect to DB:', error);
 		process.exit(1);
 	}
 };
