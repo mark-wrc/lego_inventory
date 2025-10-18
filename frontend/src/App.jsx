@@ -23,7 +23,7 @@ const App = () => {
 				<main className='pt-2 bg-slate-200 overflow-y-auto'>
 					<Routes>
 						<Route
-							path='/'
+							index
 							element={<Home />}
 						/>
 						<Route

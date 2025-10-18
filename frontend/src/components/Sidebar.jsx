@@ -19,7 +19,7 @@ const Sidebar = ({ isOpen }) => (
 	>
 		<div className='flex items-center justify-center py-4 border-b border-gray-700'>
 			<span className='text-2xl font-bold'>
-				{isOpen ? 'MyDash' : 'MD'}
+				{isOpen ? 'Lego Dashboard' : 'LD'}
 			</span>
 		</div>
 

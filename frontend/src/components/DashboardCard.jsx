@@ -1,12 +1,13 @@
 import React from 'react';
 import { useTheme } from '../context/ThemeContext.jsx';
 
-const DashboardCard = ({ title, value }) => {
+const DashboardCard = ({ title, value, onClick }) => {
 	const { darkMode } = useTheme();
 
 	return (
 		<div
-			className={`p-6 rounded-xl shadow-md transition-transform transform hover:shadow-lg hover:-translate-y-1 ${
+			onClick={onClick} // ✅ make card clickable
+			className={`p-6 rounded-xl shadow-md transition-transform transform hover:shadow-lg hover:-translate-y-1 cursor-pointer ${
 				darkMode
 					? 'bg-gray-800 text-gray-100'
 					: 'bg-white text-gray-800'
