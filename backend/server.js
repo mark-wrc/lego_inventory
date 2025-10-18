@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 
 const fileName = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(fileName);
-
+const PORT = process.env.PORT || 5000;
 dotenv.config({ path: './backend/config/config.env' });
 
 const app = express();
@@ -33,7 +33,9 @@ app.use(errorHandler);
 
 if (process.env.NODE_ENV === 'production') {
 	app.use(express.static(path.join(__dirname, '../frontend/dist')));
-	app.get('*', (req, res) => {
+
+	// ✅ Use regex instead of '*' or '/*'
+	app.get(/.*/, (req, res) => {
 		res.sendFile(path.resolve(__dirname, '../frontend/dist/index.html'));
 	});
 }
@@ -42,8 +44,8 @@ if (process.env.NODE_ENV === 'production') {
 const startServer = async () => {
 	try {
 		await dbConnect();
-		app.listen(process.env.PORT, () => {
-			console.log(`Server started at Port: ${process.env.PORT}`);
+		app.listen(PORT, () => {
+			console.log(`Server started at Port: ${PORT}`);
 		});
 	} catch (error) {
 		console.error('Failed to connect to DB', error);
