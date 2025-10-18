@@ -25,11 +25,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 if (process.env.NODE_ENV === 'production') {
 	app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-	// Serve Home component at root
-	app.get('/', (req, res) => {
-		res.sendFile(path.resolve(__dirname, '../frontend/dist/index.html'));
-	});
-
 	// Catch-all for React Router paths
 	app.get(/.*/, (req, res) => {
 		res.sendFile(path.resolve(__dirname, '../frontend/dist/index.html'));
