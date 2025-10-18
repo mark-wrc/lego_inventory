@@ -1,0 +1,28 @@
+{
+	"name": "legoinventory",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"type": "module",
+	"scripts": {
+		"start": "node ./backend/server.js",
+		"dev": "nodemon ./backend/server.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"bcryptjs": "^3.0.2",
+		"cloudinary": "^2.7.0",
+		"colors": "^1.4.0",
+		"cors": "^2.8.5",
+		"dotenv": "^17.2.3",
+		"express": "^5.1.0",
+		"jsonwebtoken": "^9.0.2",
+		"mongoose": "^8.19.1"
+	},
+	"devDependencies": {
+		"@faker-js/faker": "^10.1.0",
+		"nodemon": "^3.1.10"
+	}
+}
