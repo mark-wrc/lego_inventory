@@ -5,7 +5,7 @@
 	"main": "index.js",
 	"type": "module",
 	"scripts": {
-		"start": "node ./backend/server.js",
+		"start": "cd frontend && npm install && npm run build && cd ../backend && npm install",
 		"dev": "nodemon ./backend/server.js"
 	},
 	"keywords": [],
