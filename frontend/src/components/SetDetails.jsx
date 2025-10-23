@@ -18,6 +18,7 @@ const SetDetails = ({ sidebarOpen }) => {
 	const [updateParts] = useUpdatePartMutation();
 	const [updateSet] = useUpdateSetMutation();
 	const [deleteSet] = useDeleteSetMutation();
+	const [updateSetImage] = useUpdateSetImageMutation();
 
 	const [parts, setParts] = useState([]);
 	const [originalParts, setOriginalParts] = useState([]);
@@ -30,12 +31,8 @@ const SetDetails = ({ sidebarOpen }) => {
 	const rowsPerPage = 20;
 	const numericFields = ['quantity', 'ordered', 'inventory'];
 
-	// Update Image
-	const [updateSetImage] = useUpdateSetImageMutation();
 	const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 	const [selectedImage, setSelectedImage] = useState(null);
-
-	// Track editable legoSet fields (currently just description)
 	const [legoDescription, setLegoDescription] = useState('');
 
 	useEffect(() => {
@@ -60,9 +57,8 @@ const SetDetails = ({ sidebarOpen }) => {
 		JSON.stringify(parts[rowIndex]) !==
 		JSON.stringify(originalParts[rowIndex]);
 
-	const handleCellClick = (rowIndex, field) => {
+	const handleCellClick = (rowIndex, field) =>
 		setEditingCell({ rowIndex, field });
-	};
 
 	const handleInputChange = (rowIndex, field, value) => {
 		setParts((prevParts) =>
@@ -92,76 +88,54 @@ const SetDetails = ({ sidebarOpen }) => {
 		setHasChanges(true);
 	};
 
-	// Handle Save: update both LegoSet and modified parts
 	const handleSave = async () => {
-		if (invalidCells.size > 0) {
-			alert('Please fix invalid numeric fields before saving.');
-			return;
-		}
+		if (invalidCells.size > 0)
+			return alert('Please fix invalid numeric fields before saving.');
 
 		try {
 			let updatedSomething = false;
 
-			// 1️⃣ Check if LegoSet description changed
-			const isSetModified = legoDescription !== set.setDescription;
-			if (isSetModified) {
-				const setPayload = {
+			if (legoDescription !== set.setDescription) {
+				await updateSet({
 					id: set._id,
 					setDescription: legoDescription,
-				};
-				//console.log('➡️ Request to update Lego set:', setPayload);
-				await updateSet(setPayload).unwrap();
-				//console.log('⬅️ Response from updateSet:', setRes);
+				}).unwrap();
 				updatedSomething = true;
 			}
 
-			// 2️⃣ Check modified parts
-			const modifiedParts = parts.filter((p, i) => {
-				const original = originalParts[i];
-				return JSON.stringify(p) !== JSON.stringify(original);
-			});
-
+			const modifiedParts = parts.filter(
+				(p, i) => JSON.stringify(p) !== JSON.stringify(originalParts[i])
+			);
 			if (modifiedParts.length > 0) {
 				for (const part of modifiedParts) {
-					const partPayload = { id: part._id, ...part };
-					//console.log('➡️ Request to update part:', partPayload);
-					await updateParts(partPayload).unwrap();
-					//console.log('⬅️ Response from updateParts:', partRes);
+					await updateParts({ id: part._id, ...part }).unwrap();
 				}
 				updatedSomething = true;
 			}
 
-			if (!updatedSomething) {
-				alert('No changes detected.');
-				return;
-			}
+			if (!updatedSomething) return alert('No changes detected.');
 
 			alert('✅ Updates saved successfully!');
 			setHasChanges(false);
 			setEditingCell(null);
-			setOriginalParts(JSON.parse(JSON.stringify(parts))); // refresh snapshot
-		} catch (err) {
-			//console.error('❌ Update failed:', err);
+			setOriginalParts(JSON.parse(JSON.stringify(parts)));
+		} catch {
 			alert('Failed to update Lego set or parts.');
 		}
 	};
 
-	// Handle Delete
 	const handleDelete = async () => {
 		try {
 			await deleteSet(set._id).unwrap();
 			alert('Set deleted successfully!');
 			navigate('/legosets');
-		} catch (err) {
-			//console.error(err);
+		} catch {
 			alert('Failed to delete set.');
 		}
 	};
 
-	// Handle Image Upload
 	const handleLegoSetImageUpload = () => {
 		if (!selectedImage) return alert('Please select an image.');
-
 		const reader = new FileReader();
 		reader.readAsDataURL(selectedImage);
 		reader.onloadend = async () => {
@@ -173,26 +147,33 @@ const SetDetails = ({ sidebarOpen }) => {
 				alert('Image updated successfully!');
 				setIsImageModalOpen(false);
 				setSelectedImage(null);
-			} catch (err) {
-				console.error(err);
+			} catch {
 				alert('Failed to update image.');
 			}
 		};
 	};
 
 	const columns = [
-		{ key: 'item_id', label: 'Item ID' },
+		{ key: 'partImage', label: 'Thumbnail' },
 		{ key: 'part_id', label: 'Part ID' },
+		{ key: 'item_id', label: 'Item ID' },
 		{ key: 'name', label: 'Name' },
-		{ key: 'item_description', label: 'Description' },
-		{ key: 'PaB', label: 'PaB' },
 		{ key: 'color', label: 'Color' },
-		{ key: 'weight', label: 'Weight' },
-		{ key: 'US', label: 'US' },
 		{ key: 'quantity', label: 'Quantity' },
-		{ key: 'ordered', label: 'Ordered' },
+		{ key: 'item_description', label: 'Description' },
+		{ key: 'qSet', label: 'Q * set' },
 		{ key: 'inventory', label: 'Inventory' },
+		{ key: 'ordered', label: 'Ordered' },
+		{ key: 'needed', label: 'Needed' },
+		{ key: 'worldPrice', label: 'World' },
+		{ key: 'usPrice', label: 'US' },
+		{ key: 'pabPrice', label: 'PaB' },
+		{ key: 'pabPrice_y', label: 'PaB * y' },
 		{ key: 'bsStandard', label: 'BS/Standard' },
+		{ key: 'costPrice', label: 'Cost' },
+		{ key: 'costPrice_y', label: 'Cost * y' },
+		{ key: 'weight', label: 'Weight' },
+		{ key: 'salesPrice', label: 'Sales Price' },
 	];
 
 	return (
@@ -228,9 +209,8 @@ const SetDetails = ({ sidebarOpen }) => {
 					</button>
 				</div>
 
-				{/* Set Info Card */}
+				{/* Set Info */}
 				<div className='flex flex-col md:flex-row gap-6 mb-6 items-start'>
-					{console.log('SET DATA:', set)}
 					<img
 						src={set.setImage?.url}
 						alt={set.setName}
@@ -329,7 +309,6 @@ const SetDetails = ({ sidebarOpen }) => {
 											const isInvalid = invalidCells.has(
 												`${absoluteRow}-${key}`
 											);
-
 											return (
 												<td
 													key={key}
@@ -492,6 +471,7 @@ const SetDetails = ({ sidebarOpen }) => {
 					</div>
 				)}
 
+				{/* Image Modal */}
 				{isImageModalOpen && (
 					<div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
 						<div className='bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-11/12 sm:w-96 p-6'>

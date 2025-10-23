@@ -14,13 +14,13 @@ const App = () => {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
 	return (
-		<div className='flex h-screen bg-gray-100'>
+		<div className='flex h-screen bg-gray-100 max-w-full'>
 			<Sidebar isOpen={isSidebarOpen} />
 			<div className='flex flex-col flex-1 transition-all duration-300'>
 				<Header
 					toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
 				/>
-				<main className='pt-2 bg-slate-200 overflow-y-auto'>
+				<main className='pt-2 bg-slate-200 overflow-y-auto overflow-x-hidden'>
 					<Routes>
 						<Route
 							index
