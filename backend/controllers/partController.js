@@ -167,6 +167,8 @@ export const updateMultipleParts = catchAsyncError(async (req, res, next) => {
 export const updatePart = catchAsyncError(async (req, res, next) => {
 	const { id } = req.params;
 
+	console.log('CHECK REQU - ', req.body);
+
 	if (!id) {
 		return next(new customErrorHandler('Part ID is required', 400));
 	}
@@ -205,6 +207,7 @@ export const updatePart = catchAsyncError(async (req, res, next) => {
 			new customErrorHandler(`Part with ID '${id}' not found`, 404)
 		);
 	}
+	console.log('Updated Parts:', updatedPart);
 
 	res.status(200).json({
 		success: true,

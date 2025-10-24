@@ -14,10 +14,6 @@ const LegoSets = () => {
 	const [setName, setSetName] = useState('');
 	const [file, setFile] = useState(null);
 
-	/* 	useEffect(() => {
-		if (data) console.log('RTK Query data:', data);
-	}, [data]);
- */
 	const legoSets = data?.data || [];
 
 	const handleCreate = async () => {
@@ -32,8 +28,6 @@ const LegoSets = () => {
 			const sheetName = workbook.SheetNames[0];
 			const sheet = workbook.Sheets[sheetName];
 			const parts = XLSX.utils.sheet_to_json(sheet);
-
-			console.log('Checking Parts:', parts);
 
 			const mappedParts = parts.map((p, index) => ({
 				item_id: p.item_id || index + 1,
@@ -63,7 +57,6 @@ const LegoSets = () => {
 			setFile(null);
 			document.getElementById('fileInput').value = '';
 		} catch (err) {
-			//console.error('Failed to create set:', err);
 			alert('Failed to create Lego set.');
 		}
 	};
@@ -71,7 +64,6 @@ const LegoSets = () => {
 	if (isLoading) return <p className='p-6'>Loading Lego sets...</p>;
 
 	if (error) {
-		//console.error('RTK Query error:', error);
 		let errorMessage = 'Failed to fetch Lego sets.';
 		if (error.data)
 			errorMessage = error.data.message || JSON.stringify(error.data);

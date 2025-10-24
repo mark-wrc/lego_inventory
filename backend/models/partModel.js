@@ -47,7 +47,6 @@ const partSchema = new mongoose.Schema(
 			default: 0,
 		},
 
-		// 🧮 Computed / derived fields used in frontend
 		qSet: {
 			type: Number,
 			default: 0,

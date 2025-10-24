@@ -46,14 +46,6 @@ const SetDetails = ({ sidebarOpen }) => {
 	// Load set data into state
 
 	useEffect(() => {
-		if (setData) {
-			console.log('Full RTK Query response (setData):', setData);
-			// If you want to see only the parts array
-			console.log('Parts:', setData.data?.parts);
-		}
-	}, [setData]);
-
-	useEffect(() => {
 		if (setData?.data) {
 			const clonedParts = JSON.parse(
 				JSON.stringify(setData.data.parts || [])
@@ -102,7 +94,7 @@ const SetDetails = ({ sidebarOpen }) => {
 		'usPrice',
 		'pabPrice',
 		'bsStandard',
-		'costPrice',
+		'cost',
 		'costPrice_y',
 		'weight',
 		'salesPrice',
@@ -167,10 +159,6 @@ const SetDetails = ({ sidebarOpen }) => {
 	const handleSave = async () => {
 		// 1️⃣ Validation
 		if (invalidCells.size > 0 || invalidFields.size > 0) {
-			console.warn('❌ Invalid inputs exist:', {
-				invalidCells: Array.from(invalidCells),
-				invalidFields: Array.from(invalidFields),
-			});
 			return alert('Please fix invalid numeric fields before saving.');
 		}
 
@@ -193,53 +181,36 @@ const SetDetails = ({ sidebarOpen }) => {
 			}
 
 			if (set.xValue !== xValue) {
-				setPayload.xValue = xValue; // use correct schema field
+				setPayload.xValue = xValue;
 				shouldUpdateSet = true;
 				topFieldChanged = true;
 			}
 
 			if (set.yValue !== yValue) {
-				setPayload.yValue = yValue; // use correct schema field
+				setPayload.yValue = yValue;
 				shouldUpdateSet = true;
 				topFieldChanged = true;
 			}
 
 			// 3️⃣ Update LEGO set if needed
 			if (shouldUpdateSet) {
-				console.log(
-					'%c🧱 LEGO SET UPDATE REQUEST BODY:',
-					'color:#00bfff;font-weight:bold;'
-				);
-				console.log(JSON.stringify(setPayload, null, 2));
-
 				try {
-					const res = await updateSet(setPayload).unwrap();
-					console.log(
-						'%c✅ LEGO SET UPDATE RESPONSE:',
-						'color:green;'
-					);
-					console.log(res);
+					await updateSet(setPayload).unwrap();
 					updatedSomething = true;
-				} catch (err) {
-					console.error('❌ Error updating LEGO set:', err);
-				}
+				} catch (err) {}
 			}
 
 			// 4️⃣ Determine which parts to update
 			let partsToUpdate = [];
 
 			if (topFieldChanged) {
-				console.log(
-					'%c🔄 Top-level value changed — updating ALL parts.',
-					'color:#ff9800;font-weight:bold;'
-				);
-
 				partsToUpdate = parts.map((part) => ({
 					id: part._id,
 					...part,
-					qSet: (part.quantity || 0) * (numberOfSets || 1),
+					qSet: (Number(part.quantity) || 0) * (numberOfSets || 1),
 					pabPrice_x: (Number(part.PaB) || 0) * (xValue || 1),
-					costPrice_y: (Number(part.costPrice) || 0) * (yValue || 1),
+					cost: Number(part.cost) || 0,
+					costPrice_y: (Number(part.cost) || 0) * (yValue || 1),
 				}));
 			} else {
 				const modifiedParts = parts.filter((p, i) =>
@@ -249,17 +220,13 @@ const SetDetails = ({ sidebarOpen }) => {
 				);
 
 				if (modifiedParts.length > 0) {
-					console.log(
-						`%c🧩 ${modifiedParts.length} PART(S) MODIFIED:`,
-						'color:#ff9800;font-weight:bold;'
-					);
-
 					partsToUpdate = modifiedParts.map((p) => ({
 						id: p._id,
 						...p,
-						qSet: (p.quantity || 0) * (numberOfSets || 1),
+						qSet: (Number(p.quantity) || 0) * (numberOfSets || 1),
 						pabPrice_x: (Number(p.PaB) || 0) * (xValue || 1),
-						costPrice_y: (Number(p.costPrice) || 0) * (yValue || 1),
+						cost: Number(p.cost) || 0,
+						costPrice_y: (Number(p.cost) || 0) * (yValue || 1),
 					}));
 				}
 			}
@@ -267,34 +234,15 @@ const SetDetails = ({ sidebarOpen }) => {
 			// 5️⃣ Send part updates
 			if (partsToUpdate.length > 0) {
 				for (const part of partsToUpdate) {
-					console.log(
-						'%c📦 PART UPDATE REQUEST BODY:',
-						'color:#ffb300;font-weight:bold;'
-					);
-					console.log(JSON.stringify(part, null, 2));
-
 					try {
 						const res = await updateParts(part).unwrap();
-						console.log(
-							'%c✅ PART UPDATE RESPONSE:',
-							'color:green;'
-						);
-						console.log(res);
 						updatedSomething = true;
-					} catch (err) {
-						console.error(
-							`❌ Error updating part (id=${
-								part._id || part.part_id
-							}):`,
-							err
-						);
-					}
+					} catch (err) {}
 				}
 			}
 
 			// 6️⃣ Handle no-change case
 			if (!updatedSomething) {
-				console.log('%cℹ️ No changes detected to save.', 'color:gray;');
 				return alert('No changes detected.');
 			}
 
@@ -305,7 +253,6 @@ const SetDetails = ({ sidebarOpen }) => {
 			setEditingDescription(false);
 			setOriginalParts(JSON.parse(JSON.stringify(parts)));
 		} catch (err) {
-			console.error('💥 Unexpected error during save:', err);
 			alert('Failed to save changes. Check console for details.');
 		}
 	};
@@ -316,7 +263,6 @@ const SetDetails = ({ sidebarOpen }) => {
 			alert('Set deleted successfully!');
 			navigate('/legosets');
 		} catch (err) {
-			console.error('Error deleting set:', err);
 			alert('Failed to delete set.');
 		}
 	};
@@ -335,7 +281,6 @@ const SetDetails = ({ sidebarOpen }) => {
 				setIsImageModalOpen(false);
 				setSelectedImage(null);
 			} catch (err) {
-				console.error('Error updating image:', err);
 				alert('Failed to update image.');
 			}
 		};
@@ -358,7 +303,7 @@ const SetDetails = ({ sidebarOpen }) => {
 		{ key: 'PaB', label: 'PaB' },
 		{ key: 'pabPrice_x', label: 'PaB * x' },
 		{ key: 'bsStandard', label: 'BS/Standard' },
-		{ key: 'costPrice', label: 'Cost' },
+		{ key: 'cost', label: 'Cost' },
 		{ key: 'costPrice_y', label: 'Cost * y' },
 		{ key: 'weight', label: 'Weight' },
 		{ key: 'salesPrice', label: 'Sales Price' },
@@ -601,170 +546,6 @@ const SetDetails = ({ sidebarOpen }) => {
 													: 'bg-gray-50'
 											} hover:bg-indigo-100 dark:hover:bg-indigo-700 transition`}
 										>
-											{/* {columns.map(({ key }) => {
-												const isCellEditing =
-													editingPartCell?.rowIndex ===
-														absoluteRow &&
-													editingPartCell?.field ===
-														key;
-												const isInvalid =
-													invalidCells.has(
-														`${absoluteRow}-${key}`
-													);
-
-												if (key === 'partImage') {
-													return (
-														<td
-															key={key}
-															className='px-3 py-2 border cursor-default text-center'
-														>
-															{part.partImage
-																?.url ? (
-																<img
-																	src={
-																		part
-																			.partImage
-																			.url
-																	}
-																	alt={
-																		part.name ||
-																		'Thumbnail'
-																	}
-																	className='w-16 h-16 object-cover rounded-md mx-auto'
-																/>
-															) : (
-																<span>-</span>
-															)}
-														</td>
-													);
-												}
-
-												if (key === 'qSet') {
-													return (
-														<td
-															key={key}
-															className='px-3 py-2  cursor-default'
-														>
-															{(part.quantity ||
-																0) *
-																(numberOfSets ||
-																	1)}
-														</td>
-													);
-												}
-												if (key === 'pabPrice') {
-													return (
-														<td
-															key={key}
-															className='px-3 py-2 border cursor-default text-center'
-														>
-															{(Number(
-																part.PaB
-															) || 0) *
-																(Number(x) ||
-																	1)}
-														</td>
-													);
-												}
-
-												// Editable cells
-												return (
-													<td
-														key={key}
-														className={`px-3 py-2 border ${
-															darkMode
-																? 'border-gray-700'
-																: 'border-gray-300'
-														} cursor-pointer whitespace-nowrap`}
-														onDoubleClick={() =>
-															handleCellClick(
-																absoluteRow,
-																key
-															)
-														}
-													>
-														{isCellEditing ? (
-															key ===
-															'bsStandard' ? (
-																<select
-																	value={
-																		part[
-																			key
-																		] || ''
-																	}
-																	onChange={(
-																		e
-																	) =>
-																		handleInputChange(
-																			absoluteRow,
-																			key,
-																			e
-																				.target
-																				.value
-																		)
-																	}
-																	onBlur={() =>
-																		setEditingPartCell(
-																			null
-																		)
-																	}
-																	autoFocus
-																	className='w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500'
-																>
-																	<option value=''>
-																		Select
-																	</option>
-																	<option value='BS'>
-																		BS
-																	</option>
-																	<option value='Standard'>
-																		Standard
-																	</option>
-																</select>
-															) : (
-																<input
-																	type={
-																		numericFields.includes(
-																			key
-																		)
-																			? 'number'
-																			: 'text'
-																	}
-																	value={
-																		part[
-																			key
-																		] ?? ''
-																	}
-																	onChange={(
-																		e
-																	) =>
-																		handleInputChange(
-																			absoluteRow,
-																			key,
-																			e
-																				.target
-																				.value
-																		)
-																	}
-																	onBlur={() =>
-																		setEditingPartCell(
-																			null
-																		)
-																	}
-																	autoFocus
-																	className={`w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-																		isInvalid
-																			? 'border-red-500'
-																			: ''
-																	}`}
-																/>
-															)
-														) : (
-															part[key] ?? '-'
-														)}
-													</td>
-												);
-											})} */}
 											{columns.map(({ key }) => {
 												const isCellEditing =
 													editingPartCell?.rowIndex ===
@@ -837,9 +618,8 @@ const SetDetails = ({ sidebarOpen }) => {
 												// Cost * y
 												if (key === 'costPrice_y') {
 													const value =
-														(Number(
-															part.costPrice
-														) || 0) * (yValue || 1);
+														(Number(part.cost) ||
+															0) * (yValue || 1);
 													return (
 														<td
 															key={key}
