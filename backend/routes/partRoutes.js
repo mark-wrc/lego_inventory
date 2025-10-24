@@ -4,6 +4,7 @@ import {
 	deletePart,
 	getAllParts,
 	getPartById,
+	updateMultipleParts,
 	updatePart,
 	uploadPartImage,
 } from '../controllers/partController.js';

@@ -33,18 +33,22 @@ const LegoSets = () => {
 			const sheet = workbook.Sheets[sheetName];
 			const parts = XLSX.utils.sheet_to_json(sheet);
 
+			console.log('Checking Parts:', parts);
+
 			const mappedParts = parts.map((p, index) => ({
 				item_id: p.item_id || index + 1,
 				part_id: p.part_id || '',
 				name: p.name || '',
 				item_description: p.item_description || '',
-				PaB: p.PaB || '',
-				color: p.color || '',
-				weight: p.weight || '',
-				US: p.US || '',
-				quantity: p.quantity || 0,
-				ordered: p.ordered || 0,
-				inventory: p.inventory || 0,
+				PaB: p.PaB || 0,
+				color: p.Color || '',
+				weight: p.Weight || '',
+				US: p['US Price']
+					? parseFloat(p['US Price'].replace(/[^0-9.]+/g, '')) || 0
+					: 0,
+				quantity: p.Quantity || 0,
+				ordered: p.Ordered || 0,
+				inventory: p.Inventory || 0,
 				bsStandard: p['BS/Standard'] || '',
 			}));
 

@@ -31,11 +31,26 @@ export const legoApi = createApi({
 			invalidatesTags: ['LegoSet'], // refreshes getLegoSets automatically
 		}),
 
-		updateSet: builder.mutation({
+		/* updateSet: builder.mutation({
 			query: ({ id, setName, setDescription }) => ({
 				url: `/legoset/${id}`,
 				method: 'PUT',
-				body: { setName, setDescription },
+				body: { setName, setDescription, x, y},
+			}),
+			invalidatesTags: ['LegoSet'],
+		}), */
+		updateSet: builder.mutation({
+			query: ({
+				id,
+				setName,
+				setDescription,
+				numberOfSets,
+				xValue,
+				yValue,
+			}) => ({
+				url: `/legoset/${id}`,
+				method: 'PUT',
+				body: { setName, setDescription, numberOfSets, xValue, yValue },
 			}),
 			invalidatesTags: ['LegoSet'],
 		}),

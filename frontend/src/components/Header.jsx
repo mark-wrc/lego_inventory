@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Menu, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { useNavigate } from 'react-router-dom';

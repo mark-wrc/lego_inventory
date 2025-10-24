@@ -19,7 +19,7 @@ export const parseWeight = (weight) => {
 	return isNaN(num) ? 0 : num;
 };
 
-export const parseUSPrice = (price) => {
+export const 	parseUSPrice = (price) => {
 	if (!price) return 0;
 	if (typeof price === 'number') return price;
 

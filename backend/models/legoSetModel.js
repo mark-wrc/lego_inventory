@@ -30,6 +30,21 @@ const legoSetSchema = new mongoose.Schema(
 				ref: 'Part',
 			},
 		],
+		numberOfSets: {
+			type: Number,
+			required: true,
+			default: 1,
+		},
+		xValue: {
+			type: Number,
+			required: true,
+			default: 1,
+		},
+		yValue: {
+			type: Number,
+			required: true,
+			default: 1,
+		},
 	},
 	{ timestamps: true }
 );

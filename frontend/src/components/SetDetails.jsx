@@ -22,10 +22,18 @@ const SetDetails = ({ sidebarOpen }) => {
 
 	const [parts, setParts] = useState([]);
 	const [originalParts, setOriginalParts] = useState([]);
-	const [editingCell, setEditingCell] = useState(null);
+	const [editingPartCell, setEditingPartCell] = useState(null); // { rowIndex, field }
+	const [editingDescription, setEditingDescription] = useState(false);
 	const [hasChanges, setHasChanges] = useState(false);
 	const [invalidCells, setInvalidCells] = useState(new Set());
 	const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+	// New numeric fields: numberOfSets, x, y
+	const [numberOfSets, setNumberOfSets] = useState(1);
+	const [xValue, setXValue] = useState(1);
+	const [yValue, setYValue] = useState(1);
+	const [editingField, setEditingField] = useState(null); // 'numberOfSets' | 'x' | 'y' | null
+	const [invalidFields, setInvalidFields] = useState(new Set());
 
 	const [currentPage, setCurrentPage] = useState(1);
 	const rowsPerPage = 20;
@@ -35,12 +43,41 @@ const SetDetails = ({ sidebarOpen }) => {
 	const [selectedImage, setSelectedImage] = useState(null);
 	const [legoDescription, setLegoDescription] = useState('');
 
+	// Load set data into state
+
+	useEffect(() => {
+		if (setData) {
+			console.log('Full RTK Query response (setData):', setData);
+			// If you want to see only the parts array
+			console.log('Parts:', setData.data?.parts);
+		}
+	}, [setData]);
+
 	useEffect(() => {
 		if (setData?.data) {
-			const clonedParts = JSON.parse(JSON.stringify(setData.data.parts));
+			const clonedParts = JSON.parse(
+				JSON.stringify(setData.data.parts || [])
+			);
 			setParts(clonedParts);
 			setOriginalParts(clonedParts);
 			setLegoDescription(setData.data.setDescription || '');
+
+			// initialize numeric fields from backend if present (fallback to defaults)
+			setNumberOfSets(
+				typeof setData.data.numberOfSets === 'number'
+					? setData.data.numberOfSets
+					: 1
+			);
+			setXValue(
+				typeof setData.data.xValue === 'number'
+					? setData.data.xValue
+					: 1
+			);
+			setYValue(
+				typeof setData.data.yValue === 'number'
+					? setData.data.yValue
+					: 1
+			);
 		}
 	}, [setData]);
 
@@ -49,39 +86,78 @@ const SetDetails = ({ sidebarOpen }) => {
 		return <p className='p-6 text-red-500'>Set not found!</p>;
 
 	const set = setData.data;
-	const totalPages = Math.ceil(parts.length / rowsPerPage);
+	const totalPages = Math.ceil(parts.length / rowsPerPage) || 1;
 	const startIndex = (currentPage - 1) * rowsPerPage;
 	const currentParts = parts.slice(startIndex, startIndex + rowsPerPage);
 
-	const isRowModified = (rowIndex) =>
-		JSON.stringify(parts[rowIndex]) !==
-		JSON.stringify(originalParts[rowIndex]);
+	const editableFields = [
+		'name',
+		'color',
+		'quantity',
+		'item_description',
+		'inventory',
+		'ordered',
+		'needed',
+		'worldPrice',
+		'usPrice',
+		'pabPrice',
+		'bsStandard',
+		'costPrice',
+		'costPrice_y',
+		'weight',
+		'salesPrice',
+	];
+
+	const isRowModified = (rowIndex) => {
+		// guard if originalParts length doesn't match
+		if (!originalParts[rowIndex]) return false;
+		return editableFields.some(
+			(field) => parts[rowIndex][field] !== originalParts[rowIndex][field]
+		);
+	};
 
 	const handleCellClick = (rowIndex, field) =>
-		setEditingCell({ rowIndex, field });
+		setEditingPartCell({ rowIndex, field });
 
 	const handleInputChange = (rowIndex, field, value) => {
 		setParts((prevParts) =>
 			prevParts.map((p, i) => {
 				if (i !== rowIndex) return p;
+
 				const updated = { ...p };
+
+				// Handle numeric fields
 				if (numericFields.includes(field)) {
-					const num = Number(value);
-					if (isNaN(num) || num < 0) {
+					if (value === '') {
 						setInvalidCells((prev) =>
 							new Set(prev).add(`${i}-${field}`)
 						);
 					} else {
-						setInvalidCells((prev) => {
-							const copy = new Set(prev);
-							copy.delete(`${i}-${field}`);
-							return copy;
-						});
-						updated[field] = num;
+						const num = Number(value);
+						if (isNaN(num) || num < 0) {
+							setInvalidCells((prev) =>
+								new Set(prev).add(`${i}-${field}`)
+							);
+						} else {
+							setInvalidCells((prev) => {
+								const copy = new Set(prev);
+								copy.delete(`${i}-${field}`);
+								return copy;
+							});
+							updated[field] = num;
+						}
 					}
 				} else {
 					updated[field] = value;
 				}
+
+				// --- Auto-update pabPrice_x whenever PaB changes ---
+				if (field === 'PaB') {
+					updated.pabPrice_x = (
+						(Number(value) || 0) * xValue
+					).toFixed(2);
+				}
+
 				return updated;
 			})
 		);
@@ -89,38 +165,148 @@ const SetDetails = ({ sidebarOpen }) => {
 	};
 
 	const handleSave = async () => {
-		if (invalidCells.size > 0)
+		// 1️⃣ Validation
+		if (invalidCells.size > 0 || invalidFields.size > 0) {
+			console.warn('❌ Invalid inputs exist:', {
+				invalidCells: Array.from(invalidCells),
+				invalidFields: Array.from(invalidFields),
+			});
 			return alert('Please fix invalid numeric fields before saving.');
+		}
 
 		try {
 			let updatedSomething = false;
+			const setPayload = { id: set._id };
+			let shouldUpdateSet = false;
+			let topFieldChanged = false; // track if numberOfSets, xValue, or yValue changed
 
+			// 2️⃣ Detect LEGO set changes
 			if (legoDescription !== set.setDescription) {
-				await updateSet({
-					id: set._id,
-					setDescription: legoDescription,
-				}).unwrap();
-				updatedSomething = true;
+				setPayload.setDescription = legoDescription;
+				shouldUpdateSet = true;
 			}
 
-			const modifiedParts = parts.filter(
-				(p, i) => JSON.stringify(p) !== JSON.stringify(originalParts[i])
-			);
-			if (modifiedParts.length > 0) {
-				for (const part of modifiedParts) {
-					await updateParts({ id: part._id, ...part }).unwrap();
+			if (set.numberOfSets !== numberOfSets) {
+				setPayload.numberOfSets = numberOfSets;
+				shouldUpdateSet = true;
+				topFieldChanged = true;
+			}
+
+			if (set.xValue !== xValue) {
+				setPayload.xValue = xValue; // use correct schema field
+				shouldUpdateSet = true;
+				topFieldChanged = true;
+			}
+
+			if (set.yValue !== yValue) {
+				setPayload.yValue = yValue; // use correct schema field
+				shouldUpdateSet = true;
+				topFieldChanged = true;
+			}
+
+			// 3️⃣ Update LEGO set if needed
+			if (shouldUpdateSet) {
+				console.log(
+					'%c🧱 LEGO SET UPDATE REQUEST BODY:',
+					'color:#00bfff;font-weight:bold;'
+				);
+				console.log(JSON.stringify(setPayload, null, 2));
+
+				try {
+					const res = await updateSet(setPayload).unwrap();
+					console.log(
+						'%c✅ LEGO SET UPDATE RESPONSE:',
+						'color:green;'
+					);
+					console.log(res);
+					updatedSomething = true;
+				} catch (err) {
+					console.error('❌ Error updating LEGO set:', err);
 				}
-				updatedSomething = true;
 			}
 
-			if (!updatedSomething) return alert('No changes detected.');
+			// 4️⃣ Determine which parts to update
+			let partsToUpdate = [];
 
+			if (topFieldChanged) {
+				console.log(
+					'%c🔄 Top-level value changed — updating ALL parts.',
+					'color:#ff9800;font-weight:bold;'
+				);
+
+				partsToUpdate = parts.map((part) => ({
+					id: part._id,
+					...part,
+					qSet: (part.quantity || 0) * (numberOfSets || 1),
+					pabPrice_x: (Number(part.PaB) || 0) * (xValue || 1),
+					costPrice_y: (Number(part.costPrice) || 0) * (yValue || 1),
+				}));
+			} else {
+				const modifiedParts = parts.filter((p, i) =>
+					editableFields.some(
+						(field) => p[field] !== originalParts[i]?.[field]
+					)
+				);
+
+				if (modifiedParts.length > 0) {
+					console.log(
+						`%c🧩 ${modifiedParts.length} PART(S) MODIFIED:`,
+						'color:#ff9800;font-weight:bold;'
+					);
+
+					partsToUpdate = modifiedParts.map((p) => ({
+						id: p._id,
+						...p,
+						qSet: (p.quantity || 0) * (numberOfSets || 1),
+						pabPrice_x: (Number(p.PaB) || 0) * (xValue || 1),
+						costPrice_y: (Number(p.costPrice) || 0) * (yValue || 1),
+					}));
+				}
+			}
+
+			// 5️⃣ Send part updates
+			if (partsToUpdate.length > 0) {
+				for (const part of partsToUpdate) {
+					console.log(
+						'%c📦 PART UPDATE REQUEST BODY:',
+						'color:#ffb300;font-weight:bold;'
+					);
+					console.log(JSON.stringify(part, null, 2));
+
+					try {
+						const res = await updateParts(part).unwrap();
+						console.log(
+							'%c✅ PART UPDATE RESPONSE:',
+							'color:green;'
+						);
+						console.log(res);
+						updatedSomething = true;
+					} catch (err) {
+						console.error(
+							`❌ Error updating part (id=${
+								part._id || part.part_id
+							}):`,
+							err
+						);
+					}
+				}
+			}
+
+			// 6️⃣ Handle no-change case
+			if (!updatedSomething) {
+				console.log('%cℹ️ No changes detected to save.', 'color:gray;');
+				return alert('No changes detected.');
+			}
+
+			// 7️⃣ Final success actions
 			alert('✅ Updates saved successfully!');
 			setHasChanges(false);
-			setEditingCell(null);
+			setEditingPartCell(null);
+			setEditingDescription(false);
 			setOriginalParts(JSON.parse(JSON.stringify(parts)));
-		} catch {
-			alert('Failed to update Lego set or parts.');
+		} catch (err) {
+			console.error('💥 Unexpected error during save:', err);
+			alert('Failed to save changes. Check console for details.');
 		}
 	};
 
@@ -129,7 +315,8 @@ const SetDetails = ({ sidebarOpen }) => {
 			await deleteSet(set._id).unwrap();
 			alert('Set deleted successfully!');
 			navigate('/legosets');
-		} catch {
+		} catch (err) {
+			console.error('Error deleting set:', err);
 			alert('Failed to delete set.');
 		}
 	};
@@ -147,7 +334,8 @@ const SetDetails = ({ sidebarOpen }) => {
 				alert('Image updated successfully!');
 				setIsImageModalOpen(false);
 				setSelectedImage(null);
-			} catch {
+			} catch (err) {
+				console.error('Error updating image:', err);
 				alert('Failed to update image.');
 			}
 		};
@@ -166,9 +354,9 @@ const SetDetails = ({ sidebarOpen }) => {
 		{ key: 'ordered', label: 'Ordered' },
 		{ key: 'needed', label: 'Needed' },
 		{ key: 'worldPrice', label: 'World' },
-		{ key: 'usPrice', label: 'US' },
-		{ key: 'pabPrice', label: 'PaB' },
-		{ key: 'pabPrice_y', label: 'PaB * y' },
+		{ key: 'US', label: 'US' },
+		{ key: 'PaB', label: 'PaB' },
+		{ key: 'pabPrice_x', label: 'PaB * x' },
 		{ key: 'bsStandard', label: 'BS/Standard' },
 		{ key: 'costPrice', label: 'Cost' },
 		{ key: 'costPrice_y', label: 'Cost * y' },
@@ -180,7 +368,7 @@ const SetDetails = ({ sidebarOpen }) => {
 		<div
 			className={`transition-all duration-300 min-h-screen ${
 				darkMode
-					? 'bg-gray-900 text-gray-100'
+					? 'bg-black text-gray-100'
 					: 'bg-gray-100 text-gray-900'
 			}`}
 		>
@@ -225,9 +413,11 @@ const SetDetails = ({ sidebarOpen }) => {
 						<h2 className='text-3xl font-bold mb-3'>
 							{set.setName}
 						</h2>
+
+						{/* Description (editable on double-click) */}
 						<p className='text-lg mb-2'>
 							Description:{' '}
-							{editingCell?.setDescription ? (
+							{editingDescription ? (
 								<input
 									type='text'
 									value={legoDescription}
@@ -235,7 +425,7 @@ const SetDetails = ({ sidebarOpen }) => {
 										setLegoDescription(e.target.value);
 										setHasChanges(true);
 									}}
-									onBlur={() => setEditingCell(null)}
+									onBlur={() => setEditingDescription(false)}
 									autoFocus
 									className='w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500'
 								/>
@@ -243,165 +433,535 @@ const SetDetails = ({ sidebarOpen }) => {
 								<span
 									className='px-2 cursor-pointer'
 									onDoubleClick={() =>
-										setEditingCell({ setDescription: true })
+										setEditingDescription(true)
 									}
 								>
 									{legoDescription || '-'}
 								</span>
 							)}
 						</p>
+
+						{/* Total Parts */}
 						<p className='text-lg mb-2'>
 							Total Parts:{' '}
 							<span className='font-semibold px-2'>
-								{parts.length}
+								{parts.length * numberOfSets}
 							</span>
 						</p>
+
+						{/* New numeric editable fields: Number of sets, x, y */}
+						<div className='flex flex-col justify-start '>
+							{[
+								{
+									label: 'Number of Sets',
+									key: 'numberOfSets',
+									value: numberOfSets,
+									setter: setNumberOfSets,
+								},
+								{
+									label: 'Value x',
+									key: 'xValue',
+									value: xValue,
+									setter: setXValue,
+								},
+								{
+									label: 'Value y',
+									key: 'yValue',
+									value: yValue,
+									setter: setYValue,
+								},
+							].map(({ label, key, value, setter }) => {
+								const isEditing = editingField === key;
+								const isInvalid = invalidFields.has(key);
+								return (
+									<p
+										key={key}
+										className='text-lg mb-2'
+									>
+										{label}:{' '}
+										{isEditing ? (
+											<input
+												type='number'
+												min={0}
+												value={value}
+												autoFocus
+												onChange={(e) => {
+													const v = e.target.value;
+													if (v === '') {
+														setInvalidFields(
+															(prev) =>
+																new Set(
+																	prev
+																).add(key)
+														);
+													} else {
+														const n = Number(v);
+														if (isNaN(n) || n < 0) {
+															setInvalidFields(
+																(prev) =>
+																	new Set(
+																		prev
+																	).add(key)
+															);
+														} else {
+															setInvalidFields(
+																(prev) => {
+																	const copy =
+																		new Set(
+																			prev
+																		);
+																	copy.delete(
+																		key
+																	);
+																	return copy;
+																}
+															);
+															setter(n);
+															setHasChanges(true);
+														}
+													}
+												}}
+												onBlur={() =>
+													setEditingField(null)
+												}
+												className={`w-20 px-2 py-1 border rounded text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-gray-800 dark:text-gray-100 ${
+													isInvalid
+														? 'border-red-500'
+														: 'border-gray-300 dark:border-gray-700'
+												}`}
+											/>
+										) : (
+											<span
+												className='font-semibold px-2 cursor-pointer dark:text-gray-100'
+												onDoubleClick={() =>
+													setEditingField(key)
+												}
+											>
+												{value}
+											</span>
+										)}
+									</p>
+								);
+							})}
+						</div>
+
 						<p className='text-gray-500 dark:text-gray-300'>
-							Double-click on description or table cells to edit.
+							Double-click on description, the small fields above,
+							or table cells to edit.
 						</p>
 					</div>
 				</div>
 
-				{/* Table */}
+				{/* Scrollable Table */}
 				<div className='overflow-x-auto rounded-2xl border border-gray-300 dark:border-gray-700 shadow-lg'>
-					<table className='min-w-[900px] w-full border-collapse'>
-						<thead
-							className={`sticky top-0 z-10 ${
-								darkMode
-									? 'bg-gray-800 text-gray-200'
-									: 'bg-gray-100 text-gray-700'
-							}`}
-						>
-							<tr>
-								{columns.map((col) => (
-									<th
-										key={col.key}
-										className='px-4 py-3 text-left border-b border-gray-400'
-									>
-										{col.label}
-									</th>
-								))}
-							</tr>
-						</thead>
-						<tbody>
-							{currentParts.map((part, rowIndex) => {
-								const absoluteRow = startIndex + rowIndex;
-								return (
-									<tr
-										key={rowIndex}
-										className={`${
-											isRowModified(absoluteRow)
-												? 'bg-yellow-100 dark:bg-yellow-800'
-												: rowIndex % 2 === 0
-												? darkMode
-													? 'bg-gray-900'
-													: 'bg-white'
-												: darkMode
-												? 'bg-gray-800'
-												: 'bg-gray-50'
-										} hover:bg-indigo-100 dark:hover:bg-indigo-700 transition`}
-									>
-										{columns.map(({ key }) => {
-											const isCellEditing =
-												editingCell?.rowIndex ===
-													absoluteRow &&
-												editingCell?.field === key;
-											const isInvalid = invalidCells.has(
-												`${absoluteRow}-${key}`
-											);
-											return (
-												<td
-													key={key}
-													className={`px-3 py-2 border ${
-														darkMode
-															? 'border-gray-700'
-															: 'border-gray-300'
-													} cursor-pointer`}
-													onDoubleClick={() =>
-														handleCellClick(
-															absoluteRow,
-															key
-														)
-													}
-												>
-													{isCellEditing ? (
-														key === 'bsStandard' ? (
-															<select
-																value={
-																	part[key] ||
-																	''
-																}
-																onChange={(e) =>
-																	handleInputChange(
-																		absoluteRow,
-																		key,
-																		e.target
-																			.value
-																	)
-																}
-																onBlur={() =>
-																	setEditingCell(
-																		null
-																	)
-																}
-																autoFocus
-																className='w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500'
-															>
-																<option value=''>
-																	Select
-																</option>
-																<option value='BS'>
-																	BS
-																</option>
-																<option value='Standard'>
-																	Standard
-																</option>
-															</select>
+					{/* width adjusts using inline style based on sidebarOpen */}
+					<div
+						className='overflow-x-auto overflow-y-auto rounded-2xl'
+						style={{
+							width: `calc(100vw - ${
+								sidebarOpen ? '15rem' : '8rem'
+							})`,
+							transition: 'width 0.12s',
+						}}
+					>
+						<table className='w-full border-collapse'>
+							<thead
+								className={`sticky top-0 z-10 ${
+									darkMode
+										? 'bg-gray-800 text-gray-200'
+										: 'bg-gray-100 text-gray-700'
+								}`}
+							>
+								<tr>
+									{columns.map((col) => (
+										<th
+											key={col.key}
+											className='px-4 py-3 text-left border-b border-gray-400 whitespace-nowrap'
+										>
+											{col.label}
+										</th>
+									))}
+								</tr>
+							</thead>
+							<tbody>
+								{currentParts.map((part, rowIndex) => {
+									const absoluteRow = startIndex + rowIndex;
+									return (
+										<tr
+											key={rowIndex}
+											className={`${
+												isRowModified(absoluteRow)
+													? 'bg-yellow-100 dark:bg-yellow-800'
+													: rowIndex % 2 === 0
+													? darkMode
+														? 'bg-gray-900'
+														: 'bg-white'
+													: darkMode
+													? 'bg-gray-800'
+													: 'bg-gray-50'
+											} hover:bg-indigo-100 dark:hover:bg-indigo-700 transition`}
+										>
+											{/* {columns.map(({ key }) => {
+												const isCellEditing =
+													editingPartCell?.rowIndex ===
+														absoluteRow &&
+													editingPartCell?.field ===
+														key;
+												const isInvalid =
+													invalidCells.has(
+														`${absoluteRow}-${key}`
+													);
+
+												if (key === 'partImage') {
+													return (
+														<td
+															key={key}
+															className='px-3 py-2 border cursor-default text-center'
+														>
+															{part.partImage
+																?.url ? (
+																<img
+																	src={
+																		part
+																			.partImage
+																			.url
+																	}
+																	alt={
+																		part.name ||
+																		'Thumbnail'
+																	}
+																	className='w-16 h-16 object-cover rounded-md mx-auto'
+																/>
+															) : (
+																<span>-</span>
+															)}
+														</td>
+													);
+												}
+
+												if (key === 'qSet') {
+													return (
+														<td
+															key={key}
+															className='px-3 py-2  cursor-default'
+														>
+															{(part.quantity ||
+																0) *
+																(numberOfSets ||
+																	1)}
+														</td>
+													);
+												}
+												if (key === 'pabPrice') {
+													return (
+														<td
+															key={key}
+															className='px-3 py-2 border cursor-default text-center'
+														>
+															{(Number(
+																part.PaB
+															) || 0) *
+																(Number(x) ||
+																	1)}
+														</td>
+													);
+												}
+
+												// Editable cells
+												return (
+													<td
+														key={key}
+														className={`px-3 py-2 border ${
+															darkMode
+																? 'border-gray-700'
+																: 'border-gray-300'
+														} cursor-pointer whitespace-nowrap`}
+														onDoubleClick={() =>
+															handleCellClick(
+																absoluteRow,
+																key
+															)
+														}
+													>
+														{isCellEditing ? (
+															key ===
+															'bsStandard' ? (
+																<select
+																	value={
+																		part[
+																			key
+																		] || ''
+																	}
+																	onChange={(
+																		e
+																	) =>
+																		handleInputChange(
+																			absoluteRow,
+																			key,
+																			e
+																				.target
+																				.value
+																		)
+																	}
+																	onBlur={() =>
+																		setEditingPartCell(
+																			null
+																		)
+																	}
+																	autoFocus
+																	className='w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500'
+																>
+																	<option value=''>
+																		Select
+																	</option>
+																	<option value='BS'>
+																		BS
+																	</option>
+																	<option value='Standard'>
+																		Standard
+																	</option>
+																</select>
+															) : (
+																<input
+																	type={
+																		numericFields.includes(
+																			key
+																		)
+																			? 'number'
+																			: 'text'
+																	}
+																	value={
+																		part[
+																			key
+																		] ?? ''
+																	}
+																	onChange={(
+																		e
+																	) =>
+																		handleInputChange(
+																			absoluteRow,
+																			key,
+																			e
+																				.target
+																				.value
+																		)
+																	}
+																	onBlur={() =>
+																		setEditingPartCell(
+																			null
+																		)
+																	}
+																	autoFocus
+																	className={`w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+																		isInvalid
+																			? 'border-red-500'
+																			: ''
+																	}`}
+																/>
+															)
 														) : (
-															<input
-																type={
-																	numericFields.includes(
-																		key
-																	)
-																		? 'number'
-																		: 'text'
-																}
-																value={
-																	part[key] ??
-																	''
-																}
-																onChange={(e) =>
-																	handleInputChange(
-																		absoluteRow,
-																		key,
-																		e.target
-																			.value
-																	)
-																}
-																onBlur={() =>
-																	setEditingCell(
-																		null
-																	)
-																}
-																autoFocus
-																className={`w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-																	isInvalid
-																		? 'border-red-500'
-																		: ''
-																}`}
-															/>
-														)
-													) : (
-														part[key] ?? '-'
-													)}
-												</td>
-											);
-										})}
-									</tr>
-								);
-							})}
-						</tbody>
-					</table>
+															part[key] ?? '-'
+														)}
+													</td>
+												);
+											})} */}
+											{columns.map(({ key }) => {
+												const isCellEditing =
+													editingPartCell?.rowIndex ===
+														absoluteRow &&
+													editingPartCell?.field ===
+														key;
+												const isInvalid =
+													invalidCells.has(
+														`${absoluteRow}-${key}`
+													);
+
+												// Thumbnail remains unchanged
+												if (key === 'partImage') {
+													return (
+														<td
+															key={key}
+															className='px-3 py-2 border cursor-default text-center'
+														>
+															{part.partImage
+																?.url ? (
+																<img
+																	src={
+																		part
+																			.partImage
+																			.url
+																	}
+																	alt={
+																		part.name ||
+																		'Thumbnail'
+																	}
+																	className='w-16 h-16 object-cover rounded-md mx-auto'
+																/>
+															) : (
+																<span>-</span>
+															)}
+														</td>
+													);
+												}
+
+												// Q * set
+												if (key === 'qSet') {
+													return (
+														<td
+															key={key}
+															className='px-3 py-2 cursor-default'
+														>
+															{(part.quantity ||
+																0) *
+																(numberOfSets ||
+																	1)}
+														</td>
+													);
+												}
+
+												// PaB * x
+												if (key === 'pabPrice_x') {
+													const value =
+														(Number(part.PaB) ||
+															0) * (xValue || 1);
+													return (
+														<td
+															key={key}
+															className='px-3 py-2  cursor-default text-center'
+														>
+															{value.toFixed(2)}
+														</td>
+													);
+												}
+
+												// Cost * y
+												if (key === 'costPrice_y') {
+													const value =
+														(Number(
+															part.costPrice
+														) || 0) * (yValue || 1);
+													return (
+														<td
+															key={key}
+															className='px-3 py-2 cursor-default text-center'
+														>
+															{value.toFixed(2)}
+														</td>
+													);
+												}
+
+												// Editable cells
+												return (
+													<td
+														key={key}
+														className={`px-3 py-2 border ${
+															darkMode
+																? 'border-gray-700'
+																: 'border-gray-300'
+														} cursor-pointer whitespace-nowrap`}
+														onDoubleClick={() =>
+															handleCellClick(
+																absoluteRow,
+																key
+															)
+														}
+													>
+														{
+															isCellEditing ? (
+																key ===
+																'bsStandard' ? (
+																	<select
+																		value={
+																			part[
+																				key
+																			] ||
+																			''
+																		}
+																		onChange={(
+																			e
+																		) =>
+																			handleInputChange(
+																				absoluteRow,
+																				key,
+																				e
+																					.target
+																					.value
+																			)
+																		}
+																		onBlur={() =>
+																			setEditingPartCell(
+																				null
+																			)
+																		}
+																		autoFocus
+																		className='w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500'
+																	>
+																		<option value=''>
+																			Select
+																		</option>
+																		<option value='BS'>
+																			BS
+																		</option>
+																		<option value='Standard'>
+																			Standard
+																		</option>
+																	</select>
+																) : (
+																	<input
+																		type={
+																			numericFields.includes(
+																				key
+																			)
+																				? 'number'
+																				: 'text'
+																		}
+																		value={
+																			part[
+																				key
+																			] ??
+																			''
+																		}
+																		onChange={(
+																			e
+																		) =>
+																			handleInputChange(
+																				absoluteRow,
+																				key,
+																				e
+																					.target
+																					.value
+																			)
+																		}
+																		onBlur={() =>
+																			setEditingPartCell(
+																				null
+																			)
+																		}
+																		autoFocus
+																		className={`w-full px-2 py-1 border rounded dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+																			isInvalid
+																				? 'border-red-500'
+																				: ''
+																		}`}
+																	/>
+																)
+															) : numericFields.includes(
+																	key
+															  ) ? (
+																part[key] ?? 0 // show 0 for empty numeric cells
+															) : (
+																part[key] ?? '0'
+															) // keep '-' for non-numeric cells
+														}
+													</td>
+												);
+											})}
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
 				</div>
 
 				{/* Pagination & Save */}
@@ -456,13 +1016,13 @@ const SetDetails = ({ sidebarOpen }) => {
 							<div className='flex justify-end gap-3'>
 								<button
 									onClick={() => setIsDeleteModalOpen(false)}
-									className='px-5 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition'
+									className='px-5 py-2 border rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition'
 								>
 									Cancel
 								</button>
 								<button
 									onClick={handleDelete}
-									className='px-5 py-2 rounded-lg text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-md transition'
+									className='px-5 py-2 rounded bg-red-600 text-white hover:bg-red-500 transition'
 								>
 									Delete
 								</button>
@@ -471,12 +1031,12 @@ const SetDetails = ({ sidebarOpen }) => {
 					</div>
 				)}
 
-				{/* Image Modal */}
+				{/* Image Upload Modal */}
 				{isImageModalOpen && (
 					<div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
 						<div className='bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-11/12 sm:w-96 p-6'>
 							<h3 className='text-xl font-semibold mb-4'>
-								Update Set Image
+								Upload New Image
 							</h3>
 							<input
 								type='file'
@@ -484,21 +1044,17 @@ const SetDetails = ({ sidebarOpen }) => {
 								onChange={(e) =>
 									setSelectedImage(e.target.files[0])
 								}
-								className='mb-4'
 							/>
-							<div className='flex justify-end gap-3'>
+							<div className='flex justify-end gap-3 mt-4'>
 								<button
-									onClick={() => {
-										setIsImageModalOpen(false);
-										setSelectedImage(null);
-									}}
-									className='px-5 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition'
+									onClick={() => setIsImageModalOpen(false)}
+									className='px-5 py-2 border rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition'
 								>
 									Cancel
 								</button>
 								<button
 									onClick={handleLegoSetImageUpload}
-									className='px-5 py-2 rounded-lg text-white bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 transition'
+									className='px-5 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-500 transition'
 								>
 									Upload
 								</button>

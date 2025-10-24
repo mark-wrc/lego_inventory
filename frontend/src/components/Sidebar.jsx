@@ -14,12 +14,15 @@ const SidebarItem = ({ icon, label, isOpen, to }) => (
 const Sidebar = ({ isOpen }) => (
 	<div
 		className={`${
-			isOpen ? 'w-64' : 'w-20'
+			isOpen ? 'w-52' : 'w-20'
 		} bg-gray-800 text-gray-100 h-screen transition-all duration-300 flex flex-col`}
 	>
-		<div className='flex items-center justify-center py-4 px-4 border-b border-gray-700'>
+		<div className='flex flex-col items-center justify-center py-4 px-4 border-b border-gray-700'>
 			<span className='text-2xl font-bold'>
-				{isOpen ? 'Lego Dashboard' : 'LD'}
+				{isOpen ? 'Lego ' : 'LD'}
+			</span>
+			<span className='text-2xl font-bold'>
+				{isOpen ? 'Dashboard ' : ''}
 			</span>
 		</div>
 

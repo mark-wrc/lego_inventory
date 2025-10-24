@@ -1,6 +1,7 @@
 import Part from '../models/partModel.js';
 import catchAsyncError from '../utils/catchAsyncError.js';
 import { customErrorHandler } from '../utils/customErrorHandler.js';
+import { parseUSPrice, parseWeight } from '../utils/partUtils.js';
 import { deleteImage, uploadImage } from '../utils/uploadImage.js';
 
 /**
@@ -101,27 +102,115 @@ export const createPart = catchAsyncError(async (req, res, next) => {
 });
 
 /**
- * Update a single Part
- * PUT /api/part/:id
+ * Update multiple parts in bulk
+ * PUT /api/parts/bulk
  */
+export const updateMultipleParts = catchAsyncError(async (req, res, next) => {
+	let { parts } = req.body;
+
+	// Allow single object input
+	if (!Array.isArray(parts)) {
+		if (req.body && Object.keys(req.body).length > 0) {
+			parts = [req.body];
+		} else {
+			return next(
+				new customErrorHandler('No parts provided for update', 400)
+			);
+		}
+	}
+
+	if (parts.length === 0) {
+		return next(new customErrorHandler('Empty parts array', 400));
+	}
+
+	//console.log('Parts Request Body:', parts);
+
+	const bulkOps = parts.map((p) => ({
+		updateOne: {
+			filter: { _id: p._id },
+			update: {
+				$set: {
+					item_id: p.item_id,
+					part_id: p.part_id,
+					name: p.name,
+					item_description: p.item_description,
+					color: p.color,
+					PaB: p.PaB ?? 0,
+					US: p.US ?? 0,
+					weight: p.weight ?? 0,
+					quantity: p.quantity ?? 0,
+					ordered: p.ordered ?? 0,
+					inventory: p.inventory ?? 0,
+					qSet: p.qSet ?? 0,
+					needed: p.needed ?? 0,
+					World: p.World ?? 0,
+					cost: p.cost ?? 0,
+					salesPrice: p.salesPrice ?? 0,
+					pabPrice_x: p.pabPrice_x ?? 0,
+					costPrice_y: p.costPrice_y ?? 0,
+					bsStandard: p.bsStandard ?? 'BS',
+				},
+			},
+		},
+	}));
+
+	const updatedParts = await Part.bulkWrite(bulkOps);
+
+	// 	console.log(updatedParts);
+	// 	console.log(`message: Updated ${parts.length} part(s) successfully`);
+	// -
+	res.status(200).json({
+		success: true,
+		message: `Updated ${parts.length} part(s) successfully`,
+	});
+});
 export const updatePart = catchAsyncError(async (req, res, next) => {
 	const { id } = req.params;
 
+	if (!id) {
+		return next(new customErrorHandler('Part ID is required', 400));
+	}
+
+	// Map and sanitize fields from request body
 	const data = {
-		...req.body,
-		weight: req.body.weight ? parseWeight(req.body.weight) : undefined,
-		US: req.body.US ? parseUSPrice(req.body.US) : undefined,
+		item_id: req.body.item_id,
+		part_id: req.body.part_id,
+		name: req.body.name,
+		item_description: req.body.item_description,
+		color: req.body.color,
+		PaB: req.body.PaB ?? 0,
+		US: req.body.US ?? 0,
+		weight: req.body.weight ?? 0,
+		quantity: req.body.quantity ?? 0,
+		ordered: req.body.ordered ?? 0,
+		inventory: req.body.inventory ?? 0,
+		qSet: req.body.qSet ?? 0,
+		needed: req.body.needed ?? 0,
+		World: req.body.World ?? 0,
+		cost: req.body.cost ?? 0,
+		salesPrice: req.body.salesPrice ?? 0,
+		pabPrice_x: req.body.pabPrice_x ?? 0,
+		costPrice_y: req.body.costPrice_y ?? 0,
+		bsStandard: req.body.bsStandard ?? 'BS',
 	};
 
-	const part = await Part.findByIdAndUpdate(id, data, { new: true });
+	// Parse special values
+	if (data.weight) data.weight = parseWeight(data.weight);
+	if (data.US) data.US = parseUSPrice(data.US);
 
-	if (!part) {
+	const updatedPart = await Part.findByIdAndUpdate(id, data, { new: true });
+
+	if (!updatedPart) {
 		return next(
 			new customErrorHandler(`Part with ID '${id}' not found`, 404)
 		);
 	}
 
-	res.status(200).json({ success: true, data: part });
+	res.status(200).json({
+		success: true,
+		message: 'Part updated successfully',
+		data: updatedPart,
+	});
 });
 
 /**
